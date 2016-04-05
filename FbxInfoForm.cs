@@ -2,6 +2,7 @@
 using System.Windows.Forms;
 using System.Drawing;
 using FbxSharp;
+using System.Linq;
 
 namespace FbxInfo
 {
@@ -65,7 +66,14 @@ namespace FbxInfo
 
         void NodeHierarchy_AfterSelect(object sender, TreeViewEventArgs e)
         {
-            output.Text = e.Node.Text + "\n" + ((Scene)e.Node.Tag).ToString();
+            if (e.Node.Tag == null)
+            {
+                output.Text = e.Node.Text;
+            }
+            else
+            {
+                output.Text = e.Node.Text + "\n" + ((FbxObject)e.Node.Tag).ToString();
+            }
         }
 
         protected void FileOpenItem_Click(object sender, EventArgs e)
@@ -82,13 +90,46 @@ namespace FbxInfo
             var importer = new Importer();
             var scene = importer.Import(filename);
 
-            nodeHierarchy.Nodes.Add(GetNodeFromScene(scene));
+            var node = GetNodeFromScene(scene);
+            nodeHierarchy.Nodes.Clear();
+            nodeHierarchy.Nodes.Add(node);
         }
 
-        TreeNode GetNodeFromScene(Scene scene)
+        static TreeNode GetNodeFromScene(Scene scene)
         {
-            var node = new TreeNode(scene.GetNameWithNameSpacePrefix());
-            node.Tag = scene;
+            var node = GetNodeFromFbxObject(scene);
+            var root = scene.GetRootNode();
+            var nodesnode = GetNodeFromNode(root);
+            nodesnode.Text = "Nodes";
+            node.Nodes.Insert(0, nodesnode);
+            return node;
+        }
+
+        static TreeNode GetNodeFromNode(Node obj)
+        {
+            var tnode = new TreeNode(obj.Name);
+            tnode.Tag = obj;
+            foreach (var child in obj.ChildNodes)
+            {
+                tnode.Nodes.Add(
+                    GetNodeFromNode(child));
+            }
+            return tnode;
+        }
+
+        static TreeNode GetNodeFromFbxObject(FbxObject fobj)
+        {
+            var node = new TreeNode(fobj.GetNameWithNameSpacePrefix());
+            node.Tag = fobj;
+            var srcnode = new TreeNode("SrcObjects");
+            srcnode.Tag = fobj.SrcObjects;
+            node.Nodes.Add(srcnode);
+            srcnode.Nodes.AddRange(
+                fobj.SrcObjects
+                .Where(sobj => sobj.DstObjects.Count == 1)
+                .Select(
+                    new Func<FbxObject, TreeNode>(
+                        GetNodeFromFbxObject)).ToArray());
             return node;
         }
     }
